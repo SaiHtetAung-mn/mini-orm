@@ -34,9 +34,24 @@ const operators = [
     "!~~*"
 ];
 
-const order = Object.freeze({
+const orderDirection = Object.freeze({
     ASCENDING: 'asc',
     DESCENDING: 'desc'
 });
 
-module.exports = { operators, order }
+const whereType = Object.freeze({
+    BASIC: 'basic',
+    IN: 'in'
+});
+
+const havingType = Object.freeze({
+    BASIC: 'basic',
+    BETWEEN: 'between'
+})
+
+module.exports = { 
+    operators, 
+    orderDirection,
+    whereType,
+    havingType
+}
