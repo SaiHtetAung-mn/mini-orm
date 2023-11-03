@@ -1,4 +1,6 @@
 const { operators, orderDirection, whereType, havingType } = require('./assets');
+const connection = require('./connection');
+connection.connectDB();
 
 class QueryBuilder {
     #queryObj = {
@@ -13,8 +15,27 @@ class QueryBuilder {
         offset: null
     };
 
+    #$table = '';
+    #$primaryKey = 'id';
+    #$fillable = null;
+
+    /**
+     * @param {String} tableName 
+     * @param {String} pk Primary Key
+     * @param {Array<String>} fillable Insertable columns
+     */
     constructor(tableName) {
-        this.#queryObj.from = tableName;
+        this.#$table = tableName;
+    }
+
+    setPrimaryKey(pk) {
+        this.#$primaryKey = pk;
+        return this;
+    }
+
+    setFillable(cols) {
+        this.#$fillable = cols;
+        return this;
     }
 
     #getSelectQuery() {
@@ -68,7 +89,7 @@ class QueryBuilder {
             this.#queryObj.distinct ? 'DISTINCT' : null,
             this.#getSelectQuery(),
             'FROM',
-            `'${this.#queryObj.from}'`,
+            this.#$table,
             ...(this.#queryObj.wheres.length > 0 ? ['WHERE', this.#getWhereQuery()] : [null]),
             ...(this.#queryObj.orders.length > 0 ? ['ORDER BY', this.#getOrderQuery()] : [null]),
             ...(this.#queryObj.groups.length > 0 ? ['GROUP BY', this.#getGroupByQuery()] : [null]),
@@ -80,21 +101,17 @@ class QueryBuilder {
     }
 
     #commonWhere({ type, column, operator, value=undefined, values=undefined, boolean="and"}) {
+        const whereObj = { type, column: column, boolean };
+
         if(type == whereType.BASIC) {
             if(!operators.includes(operator)) throw new Error(`Invalid operator '${operator}'.`);
-        }
 
-        if(type == whereType.IN) {
-            if(!Array.isArray(values)) throw new Error(`Argument must be iteratable array for where in clause`);
-        }
-
-        const whereObj = { type, column: `'${column}'`, boolean };
-
-        if(type == whereType.BASIC) {
             whereObj.operator = operator;
             whereObj.value = typeof value == 'string' ? `'${value}'` : value;
         }
         else if(type == whereType.IN) {
+            if(!Array.isArray(values)) throw new Error(`Argument must be iteratable array for where in clause`);
+
             whereObj.values = values.map(val => typeof val == 'string' ? `'${val}'` : val);
         }
 
@@ -103,12 +120,10 @@ class QueryBuilder {
     }
 
     #commonHaving({ type, column, operator, value=undefined, value1=undefined, value2=undefined, boolean="and", not=false }) {
+        const havingObj = { type, column: `${column}`, boolean };
         if(type == havingType.BASIC) {
             if(!operators.includes(operator)) throw new Error(`Invalid operator '${operator}'.`);
-        }
 
-        const havingObj = { type, column: `'${column}'`, boolean };
-        if(type == havingType.BASIC) {
             havingObj.operator = operator;
             havingObj.value = typeof value == 'string' ? `'${value}'` : value;
         }
@@ -122,12 +137,23 @@ class QueryBuilder {
         return this;
     }
 
+    #runQuery() {
+        const query = this.#build();
+        return new Promise((resolve, reject) => {
+            connection.query(query, (err, result) => {
+                if(err) return reject(err);
+
+                resolve(result);
+            })
+        })
+    }
+
     /**
      * @param {Array|String} columns
      */
     select(columns=[]) {
         this.#queryObj.selects.push(
-            ...(Array.isArray(columns) ? columns.map(col => `'${col}'`) : [columns])
+            ...(Array.isArray(columns) ? columns.map(col => `${col}`) : [columns])
         );
 
         return this;
@@ -144,8 +170,13 @@ class QueryBuilder {
      * @param {String} operator Operator like =, <=, >=, etc
      * @param {String|Number} value  
      */
-    where(column, operator, value=null) {
-        return this.#commonWhere({ type: whereType.BASIC, column, operator, value });
+    where(column, operator, value) {
+        return this.#commonWhere({ 
+            type: whereType.BASIC, 
+            column, 
+            operator: value == undefined ? '=' : operator, 
+            value: value == undefined ? operator : value 
+        });
     }
 
     /**
@@ -154,7 +185,13 @@ class QueryBuilder {
      * @param {String|Number} value  
      */
     orWhere(column, operator, value=null) {
-        return this.#commonWhere({ type: whereType.BASIC, column, operator, value, boolean:"or" });
+        return this.#commonWhere({ 
+            type: whereType.BASIC, 
+            column, 
+            operator: value == undefined ? '=' : operator, 
+            value: value == undefined ? operator : value ,
+            boolean: 'or'
+         });
     }
 
     /**
@@ -181,7 +218,7 @@ class QueryBuilder {
     groupBy(columns=undefined) {
         const addGroup = (col) => {
             if(['number', 'string'].includes(typeof col))
-                this.#queryObj.groups.push(`'${col.toString()}'`);
+                this.#queryObj.groups.push(`${col.toString()}`);
         }
 
         if(Array.isArray(columns)) 
@@ -198,7 +235,12 @@ class QueryBuilder {
      * @param {String|Number} value 
      */
     having(column, operator, value) {
-        return this.#commonHaving({ type: havingType.BASIC, column, operator, value });
+        return this.#commonHaving({ 
+            type: havingType.BASIC, 
+            column, 
+            operator: value == undefined ? '=' : operator, 
+            value: value == undefined ? operator : value
+        });
     }
 
     /**
@@ -208,7 +250,13 @@ class QueryBuilder {
      * @returns 
      */
     orHaving(column, operator, value) {
-        return this.#commonHaving({ type: havingType.BASIC, column, operator, value, boolean: 'or' });
+        return this.#commonHaving({ 
+            type: havingType.BASIC, 
+            column, 
+            operator: value == undefined ? '=' : operator, 
+            value: value == undefined ? operator : value,
+            boolean: 'or'
+         });
     }
 
     /**
@@ -274,6 +322,28 @@ class QueryBuilder {
     toRawSQL() {
         return this.#build();
     }
+
+
+    /**** Action Methods ****/ 
+
+    async get() {
+        return await this.#runQuery();
+    }
+
+    async first() {
+        const data = await this.#runQuery();
+        return data.length > 0 ? data[0] : null;
+    }
+
+    /**
+     * @param {String|Number} id Primary key
+     */
+    async find(id) {
+        this.#commonWhere({ type: whereType.BASIC, column: this.#$primaryKey, operator: '=', value: id, boolean: 'and' });
+        return await this.first();
+    }
+
+    
 
 }
 

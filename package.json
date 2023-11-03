@@ -1,15 +1,16 @@
 {
-  "name": "orm",
+  "name": "mini-orm",
   "version": "1.0.0",
   "description": "",
+  "private": false,
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "nodemon index.js"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "saihtetaung276@gmail.com",
+  "license": "MIT",
   "dependencies": {
     "express": "^4.18.2",
     "mysql": "^2.18.1",
