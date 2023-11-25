@@ -5,6 +5,12 @@ class Model {
     static $primaryKey = 'id';
     static $fillable = null;
 
+    #staticProps;
+
+    constructor() {
+        this.#staticProps = this.constructor;
+    }
+
     static query() {
         return (new QueryBuilder(this.$table))
             .setPrimaryKey(this.$primaryKey)

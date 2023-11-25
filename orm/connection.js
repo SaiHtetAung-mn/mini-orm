@@ -3,9 +3,9 @@ const mysql = require('mysql');
 const connection = mysql.createConnection({
     host: 'localhost',
     user: 'root',
-    password: '',
+    password: 'admin123',
     port: '3306',
-    database: 'laravel'
+    database: 'test'
 });
 
 connection.connectDB = () => {

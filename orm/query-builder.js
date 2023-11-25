@@ -1,4 +1,5 @@
 const { operators, orderDirection, whereType, havingType } = require('./assets');
+const util = require('./util');
 const connection = require('./connection');
 connection.connectDB();
 
@@ -137,15 +138,19 @@ class QueryBuilder {
         return this;
     }
 
-    #runQuery() {
-        const query = this.#build();
+    #runQuery(q) {
+        const query = q || this.#build();
         return new Promise((resolve, reject) => {
             connection.query(query, (err, result) => {
                 if(err) return reject(err);
-
+                
                 resolve(result);
             })
         })
+    }
+
+    #insertableValues(values=[]) {
+        return values.map(val => util.colValue(val));
     }
 
     /**
@@ -343,7 +348,22 @@ class QueryBuilder {
         return await this.first();
     }
 
-    
+    /**
+     * @param {Object} data 
+     */
+    async create(data) {
+        if(typeof data !== 'object' || Array.isArray(data) || data === null) throw new Error(`Argument must be object`);
+
+        const fillableData = Array.isArray(this.#$fillable) ? this.#$fillable.reduce((obj, col) => {
+            obj[col] = data[col];
+            return obj;
+        }, {}) :  data; 
+        
+        const q = `insert into ${this.#$table}(${ Object.keys(fillableData).join(',') }) values(${ this.#insertableValues(Object.values(fillableData)).join(',') })`;
+        const { insertId } = await this.#runQuery(q);
+
+        return await this.find(insertId);
+    }
 
 }
 
